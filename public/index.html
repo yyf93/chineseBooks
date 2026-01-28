@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📚 实时书籍数据面板</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0f0f23;
+      color: #fff;
+      min-height: 100vh;
+      overflow-x: hidden;
+      /* 优化: 启用硬件加速 */
+      transform: translateZ(0);
+      -webkit-transform: translateZ(0);
+    }
+    
+    /* 简化静态背景 */
+    .bg-gradient {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: 
+        radial-gradient(ellipse at 20% 20%, rgba(102, 126, 234, 0.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(118, 75, 162, 0.12) 0%, transparent 50%);
+      z-index: -1;
+      /* 优化: 移除动画 */
+    }
+    
+    .grid-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: 
+        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size: 50px 50px;
+      z-index: -1;
+    }
+    
+    /* 优化: 移除粒子动画，改用静态装饰 */
+    .particles {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      z-index: -1;
+      pointer-events: none;
+    }
+    
+    .particle {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: rgba(102, 126, 234, 0.3);
+      border-radius: 50%;
+      /* 优化: 移除动画，改用静态 */
+    }
+    
+    /* 顶部导航 */
+    .header {
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .header-content {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 20px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .logo-icon {
+      width: 50px;
+      height: 50px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      /* 优化: 移除发光动画 */
+    }
+    
+    .logo h1 {
+      font-size: 1.8em;
+      font-weight: 700;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    
+    .refresh-btn {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border: none;
+      padding: 10px 25px;
+      border-radius: 25px;
+      color: white;
+      font-size: 0.95em;
+      font-weight: 500;
+      cursor: pointer;
+      /* 优化: 简化过渡 */
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .refresh-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    .refresh-btn.spinning svg {
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    .update-time {
+      color: rgba(255,255,255,0.5);
+      font-size: 0.85em;
+    }
+    
+    /* 主内容区 */
+    .main-content {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 25px;
+    }
+    
+    /* 统计卡片 */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+    
+    @media (max-width: 1200px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    
+    .stat-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+      /* 优化: 简化过渡，移除阴影 */
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    
+    .stat-card:hover {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(102, 126, 234, 0.4);
+      /* 优化: 移除 transform 和 box-shadow */
+    }
+    
+    .stat-icon {
+      width: 45px;
+      height: 45px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 12px;
+    }
+    
+    .stat-icon.purple { background: rgba(102, 126, 234, 0.2); }
+    .stat-icon.pink { background: rgba(237, 100, 166, 0.2); }
+    .stat-icon.blue { background: rgba(66, 133, 244, 0.2); }
+    .stat-icon.green { background: rgba(52, 168, 83, 0.2); }
+    
+    .stat-value {
+      font-size: 1.8em;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    
+    .stat-label {
+      color: rgba(255,255,255,0.5);
+      font-size: 0.85em;
+    }
+    
+    /* 分类卡片网格 */
+    .categories-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 15px;
+    }
+    
+    .category-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+      cursor: pointer;
+      /* 优化: 简化过渡 */
+      transition: background 0.15s ease, border-color 0.15s ease;
+      position: relative;
+      contain: content;
+    }
+    
+    .category-card:hover {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(102, 126, 234, 0.4);
+      /* 优化: 移除 transform */
+    }
+    
+    .category-card.expanded {
+      grid-column: 1 / -1;
+      background: rgba(255,255,255,0.03);
+    }
+    
+    .category-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .category-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+    
+    .category-info {
+      flex: 1;
+    }
+    
+    .category-name {
+      font-size: 1.2em;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    
+    .category-meta {
+      display: flex;
+      gap: 12px;
+      color: rgba(255,255,255,0.5);
+      font-size: 0.85em;
+    }
+    
+    .category-arrow {
+      width: 35px;
+      height: 35px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      /* 优化: 简化过渡 */
+      transition: transform 0.15s ease;
+    }
+    
+    .category-card.expanded .category-arrow {
+      transform: rotate(90deg);
+    }
+    
+    /* 展开的书籍列表 */
+    .books-container {
+      display: none;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      position: relative;
+      z-index: 1;
+    }
+    
+    .category-card.expanded .books-container {
+      display: block;
+      /* 优化: 移除动画 */
+    }
+    
+    .books-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px;
+    }
+    
+    .book-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 15px;
+      /* 优化: 简化过渡 */
+      transition: background 0.15s ease, border-color 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: relative;
+      contain: content;
+    }
+    
+    .book-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 3px;
+      height: 100%;
+      background: linear-gradient(180deg, #667eea, #764ba2);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    
+    .book-card:hover {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(102, 126, 234, 0.3);
+      /* 优化: 移除 transform */
+    }
+    
+    .book-card:hover::before {
+      opacity: 1;
+    }
+    
+    .book-rank {
+      width: 35px;
+      height: 35px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1em;
+      flex-shrink: 0;
+    }
+    
+    .book-rank.gold { background: linear-gradient(135deg, #ffd700, #ffb700); color: #000; }
+    .book-rank.silver { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); color: #000; }
+    .book-rank.bronze { background: linear-gradient(135deg, #cd7f32, #b8860b); color: #fff; }
+    
+    .book-info {
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .book-name {
+      font-weight: 600;
+      font-size: 1em;
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .book-author {
+      color: rgba(255,255,255,0.5);
+      font-size: 0.85em;
+    }
+    
+    .book-stats {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+      flex-shrink: 0;
+      font-size: 0.9em;
+    }
+    
+    .book-views {
+      color: #4ade80;
+      font-weight: 600;
+    }
+    
+    .book-rating {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+    
+    /* 加载状态 */
+    .loading-spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid rgba(255,255,255,0.1);
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 15px auto;
+    }
+    
+    /* 分类颜色 - 简化 */
+    .cat-wenxue .category-icon { background: rgba(239, 68, 68, 0.2); }
+    .cat-keji .category-icon { background: rgba(59, 130, 246, 0.2); }
+    .cat-shangye .category-icon { background: rgba(16, 185, 129, 0.2); }
+    .cat-lishi .category-icon { background: rgba(245, 158, 11, 0.2); }
+    .cat-yishu .category-icon { background: rgba(236, 72, 153, 0.2); }
+    .cat-biancheng .category-icon { background: rgba(139, 92, 246, 0.2); }
+    .cat-xinlixue .category-icon { background: rgba(20, 184, 166, 0.2); }
+    .cat-shenghuo .category-icon { background: rgba(251, 146, 60, 0.2); }
+    .cat-zhexue .category-icon { background: rgba(168, 85, 247, 0.2); }
+    .cat-jingji .category-icon { background: rgba(34, 197, 94, 0.2); }
+    .cat-jiaoyu .category-icon { background: rgba(249, 115, 22, 0.2); }
+    .cat-yixue .category-icon { background: rgba(239, 68, 68, 0.2); }
+    .cat-junshi .category-icon { background: rgba(75, 85, 99, 0.3); }
+    .catkehuan .category-icon { background: rgba(6, 182, 212, 0.2); }
+    .cat-xuanyituili .category-icon { background: rgba(107, 33, 168, 0.2); }
+    .cat-zhuanji .category-icon { background: rgba(217, 119, 6, 0.2); }
+    .cat-meishi .category-icon { background: rgba(220, 38, 38, 0.2); }
+    .cat-lishi2 .category-icon { background: rgba(180, 83, 9, 0.2); }
+    .cat-wuli .category-icon { background: rgba(14, 165, 233, 0.2); }
+    .cat-zongjiao .category-icon { background: rgba(153, 27, 27, 0.2); }
+    .cat-yuyan .category-icon { background: rgba(124, 58, 237, 0.2); }
+    .cat-lvyou .category-icon { background: rgba(34, 197, 94, 0.2); }
+    .cat-tiyu .category-icon { background: rgba(37, 99, 235, 0.2); }
+    
+    /* 骨架屏 */
+    .skeleton {
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+    }
+    
+    /* 滚动条 - 更细 */
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-gradient"></div>
+  <div class="grid-bg"></div>
+  <div class="particles" id="particles"></div>
+  
+  <!-- 顶部导航 -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <div class="logo-icon">📚</div>
+        <h1>书籍数据面板</h1>
+      </div>
+      <div class="header-controls">
+        <span class="update-time" id="updateTime">等待数据...</span>
+        <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+          刷新
+        </button>
+      </div>
+    </div>
+  </header>
+  
+  <!-- 主内容 -->
+  <main class="main-content">
+    <!-- 统计卡片 -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-icon purple">📚</div>
+        <div class="stat-value" id="totalBooks">-</div>
+        <div class="stat-label">书籍总数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon pink">📊</div>
+        <div class="stat-value" id="totalCategories">-</div>
+        <div class="stat-label">类目数量</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">👁</div>
+        <div class="stat-value" id="totalViews">-</div>
+        <div class="stat-label">总浏览量</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">⭐</div>
+        <div class="stat-value" id="avgRating">-</div>
+        <div class="stat-label">平均评分</div>
+      </div>
+    </div>
+    
+    <!-- 分类卡片 -->
+    <div class="categories-grid" id="categoriesContainer">
+      <div class="skeleton" style="height: 150px;"></div>
+      <div class="skeleton" style="height: 150px;"></div>
+      <div class="skeleton" style="height: 150px;"></div>
+      <div class="skeleton" style="height: 150px;"></div>
+    </div>
+  </main>
+
+  <script>
+    // 类目配置
+    const CATEGORY_CONFIG = {
+      '文学': { icon: '📖', class: 'cat-wenxue' },
+      '科技': { icon: '🚀', class: 'cat-keji' },
+      '商业': { icon: '💼', class: 'cat-shangye' },
+      '历史': { icon: '🏛️', class: 'cat-lishi' },
+      '艺术': { icon: '🎨', class: 'cat-yishu' },
+      '编程': { icon: '💻', class: 'cat-biancheng' },
+      '心理学': { icon: '🧠', class: 'cat-xinlixue' },
+      '生活': { icon: '🌿', class: 'cat-shenghuo' },
+      '哲学': { icon: '🔮', class: 'cat-zhexue' },
+      '经济学': { icon: '📈', class: 'cat-jingji' },
+      '教育': { icon: '📚', class: 'cat-jiaoyu' },
+      '医学': { icon: '🏥', class: 'cat-yixue' },
+      '军事': { icon: '⚔️', class: 'cat-junshi' },
+      '科幻': { icon: '🌌', class: 'catkehuan' },
+      '悬疑推理': { icon: '🔍', class: 'cat-xuanyituili' },
+      '传记': { icon: '👤', class: 'cat-zhuanji' },
+      '美食': { icon: '🍜', class: 'cat-meishi' },
+      '物理学': { icon: '⚛️', class: 'cat-wuli' },
+      '宗教': { icon: '🙏', class: 'cat-zongjiao' },
+      '语言学习': { icon: '🗣️', class: 'cat-yuyan' },
+      '旅行': { icon: '✈️', class: 'cat-lvyou' },
+      '体育': { icon: '⚽', class: 'cat-tiyu' }
+    };
+    
+    // 状态
+    let categoryData = {};
+    let expandedCategory = null;
+    
+    // 生成粒子 - 减少数量提升性能
+    function createParticles() {
+      const container = document.getElementById('particles');
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < 15; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        particle.style.left = Math.random() * 100 + '%';
+        particle.style.animationDelay = Math.random() * 10 + 's';
+        fragment.appendChild(particle);
+      }
+      container.appendChild(fragment);
+    }
+    
+    // 格式化数字
+    function formatNumber(num) {
+      if (num >= 10000) {
+        return (num / 10000).toFixed(1) + '万';
+      }
+      return num.toLocaleString();
+    }
+    
+    // 获取排名样式
+    function getRankClass(rank) {
+      if (rank === 0) return 'gold';
+      if (rank === 1) return 'silver';
+      if (rank === 2) return 'bronze';
+      return '';
+    }
+    
+    // 获取分类数据
+    async function fetchCategoryData() {
+      try {
+        const response = await fetch('/api/data');
+        const data = await response.json();
+        updateStats(data);
+        renderCategories(data.categories);
+      } catch (error) {
+        console.error('获取数据失败:', error);
+      }
+    }
+    
+    // 刷新数据
+    async function refreshData() {
+      const btn = document.getElementById('refreshBtn');
+      btn.classList.add('spinning');
+      try {
+        const response = await fetch('/api/refresh', { method: 'POST' });
+        const data = await response.json();
+        updateStats(data);
+        renderCategories(data.categories);
+        
+        // 如果有展开的分类，重新加载
+        if (expandedCategory) {
+          await loadCategoryBooks(expandedCategory);
+        }
+      } catch (error) {
+        console.error('刷新数据失败:', error);
+      } finally {
+        setTimeout(() => btn.classList.remove('spinning'), 1000);
+      }
+    }
+    
+    // 更新统计
+    function updateStats(data) {
+      const updateTime = document.getElementById('updateTime');
+      const time = new Date(data.timestamp);
+      updateTime.textContent = `最后更新: ${time.toLocaleString()}`;
+      
+      const totalBooks = Object.values(data.allBooks).reduce((sum, books) => sum + books.length, 0);
+      const totalViews = Object.values(data.allBooks).reduce((sum, books) => sum + books.reduce((s, b) => s + b.views, 0), 0);
+      const allRatings = Object.values(data.allBooks).flat().map(b => b.rating);
+      const avgRating = (allRatings.reduce((a, b) => a + b, 0) / allRatings.length).toFixed(1);
+      
+      document.getElementById('totalBooks').textContent = totalBooks;
+      document.getElementById('totalCategories').textContent = Object.keys(data.allBooks).length;
+      document.getElementById('totalViews').textContent = formatNumber(totalViews);
+      document.getElementById('avgRating').textContent = avgRating;
+      
+      // 保存分类数据
+      categoryData = data.allBooks;
+    }
+    
+    // 渲染分类列表 - 使用 DocumentFragment 提升性能
+    function renderCategories(categories) {
+      const container = document.getElementById('categoriesContainer');
+      const fragment = document.createDocumentFragment();
+      
+      categories.forEach((cat, index) => {
+        const config = CATEGORY_CONFIG[cat.category] || { icon: '📚', class: '' };
+        const card = document.createElement('div');
+        card.className = `category-card ${config.class}`;
+        card.dataset.category = cat.category;
+        
+        card.innerHTML = `
+          <div class="category-card-header">
+            <div class="category-icon">${config.icon}</div>
+            <div class="category-info">
+              <div class="category-name">${cat.category}</div>
+              <div class="category-meta">
+                <span>📚 ${cat.bookCount} 本</span>
+                <span>👁 ${formatNumber(cat.totalViews)}</span>
+                <span>⭐ ${cat.avgRating}</span>
+              </div>
+            </div>
+            <div class="category-arrow">▶</div>
+          </div>
+          <div class="books-container">
+            <div class="loading-spinner"></div>
+          </div>
+        `;
+        
+        card.addEventListener('click', () => toggleCategory(card, cat.category));
+        fragment.appendChild(card);
+      });
+      
+      container.innerHTML = '';
+      container.appendChild(fragment);
+    }
+    
+    // 切换分类展开/收起
+    async function toggleCategory(card, categoryName) {
+      const isExpanded = card.classList.contains('expanded');
+      
+      // 收起其他展开的分类
+      document.querySelectorAll('.category-card.expanded').forEach(expandedCard => {
+        if (expandedCard !== card) {
+          expandedCard.classList.remove('expanded');
+        }
+      });
+      
+      if (isExpanded) {
+        card.classList.remove('expanded');
+        expandedCategory = null;
+      } else {
+        card.classList.add('expanded');
+        expandedCategory = categoryName;
+        await loadCategoryBooks(categoryName, card);
+      }
+    }
+    
+    // 加载分类书籍
+    async function loadCategoryBooks(categoryName, card) {
+      const booksContainer = card.querySelector('.books-container');
+      booksContainer.innerHTML = '<div class="loading-spinner"></div>';
+      
+      try {
+        const response = await fetch(`/api/category/${encodeURIComponent(categoryName)}`);
+        const data = await response.json();
+        
+        const booksHtml = data.books.map((book, rank) => `
+          <div class="book-card">
+            <span class="book-rank ${getRankClass(rank)}">${rank + 1}</span>
+            <div class="book-info">
+              <div class="book-name" title="${book.name}">${book.name}</div>
+              <div class="book-author">${book.author}</div>
+            </div>
+            <div class="book-stats">
+              <div class="book-views">👁 ${formatNumber(book.views)}</div>
+              <div class="book-rating">⭐ ${book.rating.toFixed(1)}</div>
+            </div>
+          </div>
+        `).join('');
+        
+        booksContainer.innerHTML = `<div class="books-grid">${booksHtml}</div>`;
+      } catch (error) {
+        console.error('加载分类书籍失败:', error);
+        booksContainer.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.5);padding:20px;">加载失败，请重试</div>';
+      }
+    }
+    
+    // 初始化
+    createParticles();
+    fetchCategoryData();
+  </script>
+</body>
+</html>
